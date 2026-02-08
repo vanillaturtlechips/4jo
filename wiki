@@ -1,0 +1,50 @@
+## Silver Guardian: 프로젝트 진척 요약 (2026. 02. 08)
+
+### 1. 기술 스택 및 아키텍처 (3-Tier Edge)
+
+* **Tier 1 (UI):** React 18 + Vite + **Tailwind CSS v4** (Modern & Clean Design)
+* **Tier 2 (Control):** **Tauri v2 (Rust)** - OS 커널 제어 및 데이터 중계(IPC)
+* **Tier 3 (Engine):** **Go Sidecar** - 백그라운드 실시간 프로세스/URL 탐지 엔진
+
+---
+
+### 2. 주요 해결 과제 (Troubleshooting Log)
+
+* **환경 격리:** Ubuntu 24.04 환경에서 Snap 패키지와 시스템 GLIBC 간의 충돌을 환경 변수(`LD_LIBRARY_PATH`) 조정을 통해 해결.
+* **빌드 최적화:** Tauri v2의 새로운 권한 시스템(Capabilities) 및 빌드 캐시 꼬임 문제를 `target` 초기화 및 스키마 재설정으로 해결.
+* **디자인 엔진 마이그레이션:** Tailwind v4의 변경된 PostCSS 플러그인 설정 및 Vite 통합 방식을 최신 표준으로 적용.
+
+---
+
+### 3. 현재 구현 완료된 기능
+
+* **[Core]** Go 엔진-Rust 백엔드-React 프론트엔드 간의 **실시간 데이터 파이프라인** 구축.
+* **[UI]** 부모님과 자녀 모두에게 신뢰감을 주는 **프리미엄 보안 대시보드** 인터페이스.
+* **[Sidecar]** 독립 프로세스에서 실행되는 탐지 엔진의 생명주기 관리 및 표준 출력(Stdout) 기반 데이터 수신.
+
+---
+
+## 클라우드 마이그레이션 및 확장 전략
+
+추후 서비스 고도화를 위한 클라우드 엔지니어링 관점의 3단계 로드맵입니다.
+
+### ① MSA(Microservices) 전이 설계
+
+현재 로컬에서 구동되는 Go 엔진을 **Docker 컨테이너**로 이미지화하여 클라우드(EKS/GKE)로 분리할 수 있는 구조입니다. 로컬 에이전트는 데이터 수집(Collector)만 담당하고, 분석(Analyzer)은 클라우드에서 수행하는 **비동기식 MSA**로 확장이 용이합니다.
+
+### ② 보안 사각지대 해소 (VPN 및 시크릿탭)
+
+네트워크 패킷 분석의 한계를 극복하기 위해 **OS 레벨의 윈도우 핸들(Window Handle) 및 접근성 API**를 활용합니다. 이를 통해 VPN 암호화나 브라우저 시크릿 모드 사용 여부와 상관없이 사용자 화면의 위협 요소를 탐지하는 **'Zero Trust'** 모델을 지향합니다.
+
+### ③ 대규모 분산 환경 대응
+
+수만 명의 에이전트에서 발생하는 로그를 처리하기 위해 **Kafka 기반의 데이터 스트리밍**과 **NoSQL(MongoDB/DynamoDB) 기반의 로그 저장소**를 구축할 계획입니다. 클라우드 대시보드를 통해 자녀가 언제 어디서든 부모님의 보안 상태를 확인하는 모바일 알림(SNS/FCM) 시스템으로 연결됩니다.
+
+---
+
+### 현재 파일 시스템 상태 (Snapshot)
+
+* `src-tauri/bin/`: Go 소스 및 컴파일된 사이드카 바이너리
+* `src-tauri/src/`: Rust 메인 로직 (`lib.rs`, `main.rs`)
+* `src/`: React 컴포넌트 (`App.tsx`, `main.tsx`, `index.css`)
+* `root/`: `vite.config.ts`, `index.html`, `package.json`

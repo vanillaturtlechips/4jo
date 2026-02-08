@@ -1,0 +1,22 @@
+version: '3.8'
+services:
+  # 1. AI 분석 서버 (Gemini 연동/시뮬레이션)
+  ai-analyzer:
+    build: ./backend-ai
+    ports:
+      - "8080:8080"
+    environment:
+      - GEMINI_API_KEY=YOUR_KEY_HERE
+      - DB_URL=postgres://user:pass@db:5432/guardian_db
+    depends_on:
+      - db
+
+  # 2. DB 서버 (IDC 데이터센터 시뮬레이션)
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: guardian_db
+    ports:
+      - "5432:5432"
