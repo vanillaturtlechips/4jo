@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 
-// 1. Rust 에이전트로부터 수신할 데이터 규격 (Rust의 FinalPayload와 일치)
+// 1. Rust 에이전트로부터 수신할 데이터 규격
 interface SidecarPayload {
   url: string;
-  analysis: string;
+  title: string;
 }
 
 // 2. UI 출력을 위한 로그 엔트리 규격
@@ -12,7 +12,7 @@ interface LogEntry {
   id: string;
   time: string;
   url: string;
-  analysis: string;
+  title: string;
   severity: "info" | "warning";
 }
 
@@ -20,24 +20,20 @@ function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
   useEffect(() => {
-    // Rust 사이드카로부터 전달되는 이벤트를 구독합니다
     const setupListener = async () => {
-      // "sidecar-data" 이벤트 이름은 Rust의 handle.emit 이름과 반드시 일치해야 합니다
       const unlisten = await listen<SidecarPayload>("sidecar-data", (event) => {
-        const { url, analysis } = event.payload;
+        const { url, title } = event.payload;
         
-        console.log("🚀 분석 데이터 수신:", event.payload); // 시연 중 브라우저 콘솔(F12) 확인용
+        console.log("🚀 분석 데이터 수신:", event.payload);
 
         const newEntry: LogEntry = {
           id: Math.random().toString(36).substring(2, 9),
           time: new Date().toLocaleTimeString([], { hour12: false, second: "2-digit" }),
           url: url,
-          analysis: analysis,
-          // AI 분석 결과에 특정 단어가 포함되면 시각적 경고 표시
-          severity: (analysis.includes("위험") || analysis.includes("주의") || analysis.includes("불법")) ? "warning" : "info",
+          title: title,
+          severity: "info",
         };
         
-        // 최신 로그를 상단에 배치하고 최대 10개까지 유지
         setLogs((prev) => [newEntry, ...prev].slice(0, 10));
       });
 
@@ -46,7 +42,6 @@ function App() {
 
     const listenerPromise = setupListener();
 
-    // 컴포넌트 언마운트 시 리스너 해제
     return () => {
       listenerPromise.then((unlisten) => unlisten());
     };
@@ -102,7 +97,7 @@ function App() {
                     <span className={`text-[15px] font-bold leading-tight ${
                       log.severity === "warning" ? "text-amber-600" : "text-slate-800"
                     }`}>
-                      {log.analysis}
+                      {log.title}
                     </span>
                     <span className="text-xs text-slate-400 truncate max-w-[400px] font-medium">
                       {log.url}
