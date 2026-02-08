@@ -33,7 +33,7 @@ services:
     ports:
       - "8080:8080" # 에이전트(로컬 앱)가 직접 API를 쏠 수 있도록 개방
     environment:
-      - GEMINI_API_KEY=YOUR_KEY_HERE
+      - GEMINI_API_KEY=AIzaSyD58uJgJCgWlk-dOzS1UzDlHZ_DzrVFcGY
       - DB_URL=postgres://user:pass@db:5432/guardian_db
     depends_on:
       - db
