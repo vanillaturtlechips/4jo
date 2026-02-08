@@ -1,86 +1,128 @@
-use tauri::{Emitter, Manager};
-use tauri_plugin_shell::ShellExt;
-use tauri_plugin_shell::process::CommandEvent;
-use serde::{Deserialize, Serialize};
+use tauri::Emitter;
+use notify::RecursiveMode;
+use notify_debouncer_mini::new_debouncer;
+use std::sync::mpsc::channel;
+use std::time::Duration;
+use rusqlite::Connection;
+use std::path::PathBuf;
 
-#[derive(Deserialize, Serialize, Clone)]
-struct AnalysisResponse {
-    version: String,
-    status: String,
-    result: String,
+#[derive(Clone, serde::Serialize)]
+struct ShortsData {
+    url: String,
+    title: String,
 }
 
-#[derive(Serialize, Clone)]
-struct FinalPayload {
-    url: String,
-    analysis: String,
+fn get_chrome_history_path() -> PathBuf {
+    #[cfg(target_os = "linux")]
+    {
+        let home = std::env::var("HOME").expect("HOME not set");
+        PathBuf::from(format!("{}/.config/google-chrome/Default/History", home))
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        let username = std::env::var("USERNAME").expect("USERNAME not set");
+        PathBuf::from(format!(
+            r"C:\Users\{}\AppData\Local\Google\Chrome\User Data\Default\History",
+            username
+        ))
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").expect("HOME not set");
+        PathBuf::from(format!(
+            "{}/Library/Application Support/Google/Chrome/Default/History",
+            home
+        ))
+    }
+}
+
+fn get_latest_shorts_url(last_visit_time: &mut i64) -> Option<String> {
+    let history_path = get_chrome_history_path();
+    let temp_path = std::env::temp_dir().join("chrome_history_temp");
+    
+    std::fs::copy(&history_path, &temp_path).ok()?;
+    
+    let conn = Connection::open(temp_path).ok()?;
+    
+    let mut stmt = conn.prepare(
+        "SELECT url, last_visit_time FROM urls 
+         WHERE url LIKE '%youtube.com/shorts/%'
+         AND last_visit_time > ?
+         ORDER BY last_visit_time DESC LIMIT 1"
+    ).ok()?;
+    
+    let current_time = *last_visit_time;  // 복사
+    let result = stmt.query_row([current_time], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+    }).ok();
+    
+    if let Some((url, visit_time)) = result {
+        *last_visit_time = visit_time;
+        Some(url)
+    } else {
+        None
+    }
+}
+
+fn get_youtube_title(url: &str) -> String {
+    let oembed_url = format!("https://www.youtube.com/oembed?url={}&format=json", url);
+    
+    if let Ok(resp) = reqwest::blocking::get(&oembed_url) {
+        if let Ok(json) = resp.json::<serde_json::Value>() {
+            if let Some(title) = json["title"].as_str() {
+                return title.to_string();
+            }
+        }
+    }
+    
+    "제목 가져오기 실패".to_string()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             let handle = app.handle().clone();
             
-            // 사이드카 실행 (플랫폼 접미사는 Tauri가 자동으로 붙여줍니다)
-            let sidecar = app.shell().sidecar("scanner").expect("사이드카 파일을 찾을 수 없습니다.");
-            let (mut rx, _child) = sidecar.spawn().expect("사이드카 실행에 실패했습니다.");
-
-            tauri::async_runtime::spawn(async move {
-                println!("📡 [Rust Agent] 사이드카 모니터링 시작...");
-
-                while let Some(event) = rx.recv().await {
-                    match event {
-                        // Stdout과 Stderr를 모두 처리하여 누락을 방지합니다.
-                        CommandEvent::Stdout(line_bytes) | CommandEvent::Stderr(line_bytes) => {
-                            let full_line = String::from_utf8_lossy(&line_bytes).trim().to_string();
-                            
-                            // 사이드카에서 오는 날것의 로그를 출력 (디버깅 핵심)
-                            println!("📢 [Sidecar Raw]: {}", full_line);
-
-                            // "https://"가 포함된 라인에서 URL만 추출합니다.
-                            if let Some(url_index) = full_line.find("https://") {
-                                let url = full_line[url_index..].trim().to_string();
-                                println!("🚀 [Rust Agent] URL 감지 성공: {}", url);
-
-                                let client = reqwest::Client::new();
-                                // 게이트웨이를 통해 분석 요청
-                                let res = client.post("http://localhost/api/analyze")
-                                    .json(&serde_json::json!({ "url": url }))
-                                    .send()
-                                    .await;
-
-                                match res {
-                                    Ok(response) => {
-                                        if let Ok(data) = response.json::<AnalysisResponse>().await {
-                                            println!("✅ [Rust Agent] 분석 완료: {}", data.result);
-                                            
-                                            // React로 데이터 전송
-                                            handle.emit("sidecar-data", FinalPayload {
-                                                url: url.clone(),
-                                                analysis: data.result,
-                                            }).unwrap();
-                                        }
-                                    }
-                                    Err(e) => {
-                                        println!("❌ [Rust Agent] 서버 통신 에러: {}", e);
-                                        handle.emit("sidecar-data", FinalPayload {
-                                            url: url.clone(),
-                                            analysis: format!("서버 연결 오류: {}", e),
-                                        }).unwrap();
-                                    }
-                                }
+            std::thread::spawn(move || {
+                let (tx, rx) = channel();
+                
+                let mut debouncer = new_debouncer(Duration::from_secs(2), tx)
+                    .expect("Failed to create debouncer");
+                
+                let chrome_dir = get_chrome_history_path().parent().unwrap().to_path_buf();
+                
+                debouncer.watcher().watch(&chrome_dir, RecursiveMode::NonRecursive)
+                    .expect("Failed to watch");
+                
+                println!("👀 Watching Chrome History...");
+                
+                // 현재 시간으로 초기화 (과거 기록 무시)
+                let mut last_visit_time: i64 = chrono::Utc::now().timestamp_micros();
+                
+                loop {
+                    match rx.recv() {
+                        Ok(Ok(_events)) => {
+                            if let Some(url) = get_latest_shorts_url(&mut last_visit_time) {
+                                println!("🎬 New: {}", url);
+                                
+                                let title = get_youtube_title(&url);
+                                println!("📝 Title: {}", title);
+                                
+                                handle.emit("sidecar-data", ShortsData {
+                                    url: url.clone(),
+                                    title: title.clone(),
+                                }).ok();
                             }
                         }
-                        CommandEvent::Terminated(payload) => {
-                            println!("⚠️ [Rust Agent] 사이드카가 종료되었습니다: {:?}", payload.code);
-                        }
+                        Err(e) => println!("Watch error: {:?}", e),
                         _ => {}
                     }
                 }
             });
-
+            
             Ok(())
         })
         .run(tauri::generate_context!())
