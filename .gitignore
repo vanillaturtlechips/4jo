@@ -30,3 +30,17 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# --- Frontend (Node.js) ---
+node_modules/
+dist/
+build/
+.eslintcache
+.stylelintcache
+*.local
+
+# --- Backend (Rust/Tauri) ---
+src-tauri/target/
+src-tauri/bin/*.exe
+!src-tauri/bin/.gitkeep
+src-tauri/gen/
