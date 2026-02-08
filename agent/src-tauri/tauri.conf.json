@@ -1,20 +1,21 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "temp-tauri",
+  "productName": "Silver Guardian",
   "version": "0.1.0",
-  "identifier": "com.user.temp-tauri",
+  "identifier": "com.user.silver-guardian",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "", 
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
+    "beforeBuildCommand": "",
+    "frontendDist": "../../frontend/dist"
   },
   "app": {
     "windows": [
       {
-        "title": "temp-tauri",
-        "width": 800,
-        "height": 600
+        "title": "Silver Guardian - 실시간 보안 에이전트",
+        "width": 850,
+        "height": 650,
+        "resizable": true
       }
     ],
     "security": {

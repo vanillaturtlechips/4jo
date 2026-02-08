@@ -1,46 +1,15 @@
-version: '3.8'
-
 services:
-  # 1. Gateway (Nginx) - 모든 클라우드 요청의 입구
-  gateway:
-    image: nginx:alpine
-    container_name: sg-gateway
-    ports:
-      - "80:80" # 외부에서 80포트로 접속하면 Nginx가 분기 처리
-    volumes:
-      - ./reverse-proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - frontend
-      - ai-analyzer
-    networks:
-      - sg-network
-
-  # 2. Frontend (React) - 모니터링 대시보드 웹 서비스
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: sg-frontend
-    networks:
-      - sg-network
-
-  # 3. AI 분석 서버 (Gemini 연동)
   ai-analyzer:
-    build:
-      context: ./backend-ai
-      dockerfile: Dockerfile
+    build: ./backend-ai
     container_name: sg-ai-analyzer
-    ports:
-      - "8080:8080" # 에이전트(로컬 앱)가 직접 API를 쏠 수 있도록 개방
     environment:
-      - GEMINI_API_KEY=AIzaSyD58uJgJCgWlk-dOzS1UzDlHZ_DzrVFcGY
-      - DB_URL=postgres://user:pass@db:5432/guardian_db
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DB_URL=${DB_URL}
     depends_on:
       - db
     networks:
       - sg-network
 
-  # 4. DB 서버 (IDC 데이터센터 시뮬레이션)
   db:
     image: postgres:15-alpine
     container_name: sg-db
@@ -48,17 +17,29 @@ services:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: pass
       POSTGRES_DB: guardian_db
-    ports:
-      - "5432:5432"
     volumes:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - pgdata:/var/lib/postgresql/data # 데이터 휘발 방지
+    networks:
+      - sg-network
+
+  frontend:
+    build: ./frontend
+    container_name: sg-frontend
+    networks:
+      - sg-network
+
+  gateway:
+    image: nginx:alpine
+    container_name: sg-gateway
+    ports:
+      - "80:80"
+    volumes:
+      - ./reverse-proxy/nginx.conf:/etc/nginx/conf.d/default.conf # :ro 제거 (권한 문제 방지)
+    depends_on:
+      - ai-analyzer
     networks:
       - sg-network
 
 networks:
   sg-network:
     driver: bridge
-
-volumes:
-  pgdata:
